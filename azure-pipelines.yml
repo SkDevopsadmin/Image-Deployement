@@ -1,0 +1,75 @@
+# Starter pipeline
+
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+#trigger:
+#- master
+trigger: none
+pr: none
+
+variables:
+- name: Location
+  value: '<location>'
+- name: ResourceGroup
+  value: '<ResourceGroup>'
+- name: ImageTemplateName
+  value: '<ImageTemplateName>'
+pool:
+  vmImage: ubuntu-latest
+
+
+steps:
+
+- task: AzureCLI@2
+  displayName: "Copy install scripts"
+  inputs:
+    azureSubscription: '<Subscription name>'
+    scriptType: 'bash'
+    scriptLocation: 'inlineScript'
+    inlineScript: |
+      az storage blob upload \
+      	--account-name <account name> \
+      	--container-name <container name> \
+      	--name Install-Applications.ps1 \
+      	--file Install-Applications.ps1 \
+
+- task: AzureResourceManagerTemplateDeployment@3
+  displayName: "Deploy Template"
+  continueOnError: true
+  inputs:
+    deploymentScope: 'Resource Group'
+    azureResourceManagerConnection: '<Subscription name>'
+    subscriptionId: '<Subscription id>'
+    action: 'Create Or Update Resource Group'
+    resourceGroupName: '$(ResourceGroup)'
+    location: '$(Location)'
+    templateLocation: 'Linked artifact'
+    csmFile: '<Template file name.json>'
+    csmParametersFile: '<parameter file.json>'
+    deploymentMode: 'Incremental'
+
+- task: AzurePowerShell@5
+  displayName: "Install Az.ImageBuilder"
+  inputs:
+    azureSubscription: '<Subscription name>'
+    ScriptType: 'InlineScript'
+    Inline: 'Install-Module -name Az.ImageBuilder -AllowPrerelease -Force -Scope CurrentUser'
+    azurePowerShellVersion: 'LatestVersion'
+
+- task: AzurePowerShell@5
+  displayName: "Build Image"
+  inputs: 
+    azureSubscription: '<Subscription name>'
+    ScriptType: 'InlineScript'
+    Inline: 'Start-AzImageBuilderTemplate  -Name $(ImageTemplateName) -ResourceGroupName $(ResourceGroup)'
+    azurePowerShellVersion: 'LatestVersion'
+
+- task: AzurePowerShell@5
+  displayName: "Remove Template"
+  inputs:
+    azureSubscription: '<Subscription name>'
+    ScriptType: 'InlineScript'
+    Inline: 'remove-AzImageBuilderTemplate -ImageTemplateName $(ImageTemplateName) -ResourceGroupName $(ResourceGroup)'
+    azurePowerShellVersion: 'LatestVersion'
